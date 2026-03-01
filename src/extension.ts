@@ -17,7 +17,7 @@ export function activate(context: vscode.ExtensionContext) {
 		10000
 	);
 
-	const commandId = 'antigravity-pulse.openDashboard';
+	const commandId = 'antigravity-pulse-monitor.openDashboard';
 	context.subscriptions.push(
 		vscode.commands.registerCommand(commandId, () => openDashboard())
 	);
@@ -25,7 +25,7 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(agpStatusBarItem);
 
 	// Read initial refresh interval setting
-	const config = vscode.workspace.getConfiguration('antigravity-pulse');
+	const config = vscode.workspace.getConfiguration('antigravity-pulse-monitor');
 	const intervalMs = config.get<number>('refreshInterval', 120000);
 
 	updatePulse();
@@ -33,9 +33,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Listen for settings changes to update interval live
 	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
-		if (e.affectsConfiguration('antigravity-pulse.refreshInterval')) {
+		if (e.affectsConfiguration('antigravity-pulse-monitor.refreshInterval')) {
 			if (refreshIntervalId) { clearInterval(refreshIntervalId); }
-			const newInterval = vscode.workspace.getConfiguration('antigravity-pulse').get<number>('refreshInterval', 120000);
+			const newInterval = vscode.workspace.getConfiguration('antigravity-pulse-monitor').get<number>('refreshInterval', 120000);
 			refreshIntervalId = setInterval(() => updatePulse(), newInterval);
 		}
 	}));
@@ -96,7 +96,7 @@ async function updatePulse() {
 		agpStatusBarItem.show();
 		
 		// If user enabled noisy notifications in settings, show an error popup
-		const showNotifs = vscode.workspace.getConfiguration('antigravity-pulse').get<boolean>('showNotifications', false);
+		const showNotifs = vscode.workspace.getConfiguration('antigravity-pulse-monitor').get<boolean>('showNotifications', false);
 		if (showNotifs && currentSnapshot !== null) { 
 			// Check currentSnapshot !== null to prevent spamming notifications on every 2 min tick if already offline
 			vscode.window.showErrorMessage(`Antigravity Pulse Offline: Could not reach the language server.`);
