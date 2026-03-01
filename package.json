@@ -1,6 +1,6 @@
 {
   "name": "antigravity-pulse-monitor",
-  "displayName": "Antigravity Pulse",
+  "displayName": "Antigravity Pulse Monitor",
   "icon": "assets/icon.png",
   "description": "A lightweight, real-time quota monitor for Antigravity AI models.",
   "version": "0.1.0",
