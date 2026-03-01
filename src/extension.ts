@@ -1,170 +1,221 @@
-import * as vscode from "vscode";
+import * as vscode from 'vscode';
+import { AntigravityApi, ModelQuota, QuotaSnapshot } from './api';
+
+// ─── State ────────────────────────────────────────────────────────────────────
 
 let agpStatusBarItem: vscode.StatusBarItem;
-// Store the name of the model currently "pinned" to the status bar
 let pinnedModelLabel: string | null = null;
-let currentQuotas: any = null;
+let currentSnapshot: QuotaSnapshot | null = null;
+let refreshIntervalId: NodeJS.Timeout | undefined;
+const api = new AntigravityApi();
+
+// ─── Activation ───────────────────────────────────────────────────────────────
 
 export function activate(context: vscode.ExtensionContext) {
-  // Use a very high priority (10000) so it doesn't get hidden
-  agpStatusBarItem = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
-    10000,
-  );
+	agpStatusBarItem = vscode.window.createStatusBarItem(
+		vscode.StatusBarAlignment.Right,
+		10000
+	);
 
-  const commandId = "antigravity-pulse.openDashboard";
-  context.subscriptions.push(
-    vscode.commands.registerCommand(commandId, () => openDashboard()),
-  );
-  agpStatusBarItem.command = commandId;
-  context.subscriptions.push(agpStatusBarItem);
+	const commandId = 'antigravity-pulse.openDashboard';
+	context.subscriptions.push(
+		vscode.commands.registerCommand(commandId, () => openDashboard())
+	);
+	agpStatusBarItem.command = commandId;
+	context.subscriptions.push(agpStatusBarItem);
 
-  updatePulse();
-  setInterval(() => updatePulse(), 120000);
+	// Read initial refresh interval setting
+	const config = vscode.workspace.getConfiguration('antigravity-pulse');
+	const intervalMs = config.get<number>('refreshInterval', 120000);
 
-  agpStatusBarItem.show();
-  vscode.window.showInformationMessage("Antigravity Pulse Activated!");
+	updatePulse();
+	refreshIntervalId = setInterval(() => updatePulse(), intervalMs);
+
+	// Listen for settings changes to update interval live
+	context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+		if (e.affectsConfiguration('antigravity-pulse.refreshInterval')) {
+			if (refreshIntervalId) { clearInterval(refreshIntervalId); }
+			const newInterval = vscode.workspace.getConfiguration('antigravity-pulse').get<number>('refreshInterval', 120000);
+			refreshIntervalId = setInterval(() => updatePulse(), newInterval);
+		}
+	}));
+
+	agpStatusBarItem.show();
 }
+
+export function deactivate() {
+	if (refreshIntervalId) {
+		clearInterval(refreshIntervalId);
+	}
+}
+
+// ─── Formatting Helpers ───────────────────────────────────────────────────────
+
+/** Format remaining time until reset as "Xh Ym" or "Ready" */
+function formatTimeRemaining(resetMs: number): string {
+	if (!resetMs || resetMs <= 0) { return 'N/A'; }
+	const diff = resetMs - Date.now();
+	if (diff <= 0) { return 'Ready'; }
+	const totalMins = Math.ceil(diff / 60000);
+	if (totalMins < 60) { return `${totalMins}m`; }
+	const hours = Math.floor(totalMins / 60);
+	const mins = totalMins % 60;
+	return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
+
+/** Format a reset timestamp into local date+time string, e.g. "02/03/2026 21:39" */
+function formatResetDate(resetMs: number): string {
+	if (!resetMs || resetMs <= 0) { return 'N/A'; }
+	const d = new Date(resetMs);
+	const day = String(d.getDate()).padStart(2, '0');
+	const month = String(d.getMonth() + 1).padStart(2, '0');
+	const year = d.getFullYear();
+	const hour = String(d.getHours()).padStart(2, '0');
+	const min = String(d.getMinutes()).padStart(2, '0');
+	return `${day}/${month}/${year} ${hour}:${min}`;
+}
+
+/** Format a fraction (0–1) as a rounded percentage string e.g. "92%" */
+function formatPct(fraction: number): string {
+	return `${Math.round(fraction * 100)}%`;
+}
+
+// ─── Core Refresh ─────────────────────────────────────────────────────────────
 
 async function updatePulse() {
-  let data: any = null;
+	try {
+		currentSnapshot = await api.fetchQuota();
+	} catch (err: any) {
+		// Graceful offline state
+		agpStatusBarItem.text = `$(error) AGP Offline`;
+		agpStatusBarItem.tooltip = new vscode.MarkdownString(
+			`**Antigravity Pulse** — Offline\n\n` +
+			`Could not reach the Antigravity language server.\n\n` +
+			`_Make sure Antigravity IDE is running._`
+		);
+		agpStatusBarItem.show();
+		
+		// If user enabled noisy notifications in settings, show an error popup
+		const showNotifs = vscode.workspace.getConfiguration('antigravity-pulse').get<boolean>('showNotifications', false);
+		if (showNotifs && currentSnapshot !== null) { 
+			// Check currentSnapshot !== null to prevent spamming notifications on every 2 min tick if already offline
+			vscode.window.showErrorMessage(`Antigravity Pulse Offline: Could not reach the language server.`);
+		}
 
-  try {
-    const response = await fetch("http://127.0.0.1:31415/metrics/quota");
-    if (response.ok) {
-        data = await response.json();
-    } else {
-        throw new Error(`HTTP ${response.status}`);
-    }
-  } catch (err: any) {
-    agpStatusBarItem.text = `$(error) AGP Offline`;
-    agpStatusBarItem.tooltip = `Error connecting to local metric server: ${err.message || String(err)}`;
-    agpStatusBarItem.show();
-    currentQuotas = null;
-    return; // Stop rendering UI if we have no data
-  }
-  
-  currentQuotas = data;
+		currentSnapshot = null;
+		return;
+	}
 
-  // Render Status Bar Text
-  let statusText = `$(rocket) AGP`;
-  if (pinnedModelLabel && data) {
-      // Find the percentage for the pinned model
-      let pct = 100;
-      let label = "";
-
-      if (pinnedModelLabel.includes("High")) {
-          pct = data.gemini_pro_high_pct;
-          label = "Gemini Pro";
-      } else if (pinnedModelLabel.includes("Low")) {
-          pct = data.gemini_pro_low_pct;
-          label = "Gemini Pro";
-      } else if (pinnedModelLabel.includes("Flash")) {
-          pct = data.gemini_flash_pct;
-          label = "Gemini Flash";
-      } else if (pinnedModelLabel.includes("Sonnet")) {
-          pct = data.claude_sonnet_pct;
-          label = "Claude Sonnet";
-      } else if (pinnedModelLabel.includes("Opus")) {
-          pct = data.claude_opus_pct;
-          label = "Claude Opus";
-      } else if (pinnedModelLabel.includes("GPT")) {
-          pct = data.gpt_oss_pct;
-          label = "GPT-OSS";
-      }
-      
-      statusText = `$(rocket) ${label} ${pct ?? 'N/A'}%`;
-  }
-  agpStatusBarItem.text = statusText;
-
-  // Render 6-row hover Markdown
-  const hoverContent = new vscode.MarkdownString();
-  hoverContent.isTrusted = true;
-  hoverContent.supportThemeIcons = true;
-  hoverContent.appendMarkdown(`### Model Quota Overview\n\n`);
-  hoverContent.appendMarkdown(`| Model | % | Reset |\n| :--- | :--- | :--- |\n`);
-  
-  if (data) {
-    hoverContent.appendMarkdown(`| **Gemini 3.1 Pro (High)** | ${data.gemini_pro_high_pct ?? 'N/A'}% | ${data.gemini_pro_high_reset ?? 'N/A'} |\n`);
-    hoverContent.appendMarkdown(`| **Gemini 3.1 Pro (Low)** | ${data.gemini_pro_low_pct ?? 'N/A'}% | ${data.gemini_pro_low_reset ?? 'N/A'} |\n`);
-    hoverContent.appendMarkdown(`| **Gemini 3 Flash** | ${data.gemini_flash_pct ?? 'N/A'}% | ${data.gemini_flash_reset ?? 'N/A'} |\n`);
-    hoverContent.appendMarkdown(`| **Claude Sonnet 4.6** | ${data.claude_sonnet_pct ?? 'N/A'}% | ${data.claude_sonnet_reset ?? 'N/A'} |\n`);
-    hoverContent.appendMarkdown(`| **Claude Opus 4.6** | ${data.claude_opus_pct ?? 'N/A'}% | ${data.claude_opus_reset ?? 'N/A'} |\n`);
-    hoverContent.appendMarkdown(`| **GPT-OSS 120B** | ${data.gpt_oss_pct ?? 'N/A'}% | ${data.gpt_oss_reset ?? 'N/A'} |\n`);
-  }
-
-  agpStatusBarItem.tooltip = hoverContent;
-  agpStatusBarItem.show();
+	renderStatusBar(currentSnapshot);
+	renderTooltip(currentSnapshot);
+	agpStatusBarItem.show();
 }
 
+// ─── Status Bar Text ──────────────────────────────────────────────────────────
+
+function renderStatusBar(snapshot: QuotaSnapshot) {
+	if (!pinnedModelLabel) {
+		agpStatusBarItem.text = `$(rocket) AGP`;
+		return;
+	}
+
+	const model = snapshot.models.find(m => m.label === pinnedModelLabel);
+	if (model) {
+		const pct = Math.round(model.remainingFraction * 100);
+		// Pick a colour icon based on remaining quota
+		const icon = pct > 50 ? '$(rocket)' : pct > 20 ? '$(warning)' : '$(error)';
+		agpStatusBarItem.text = `${icon} ${model.label} ${pct}%`;
+	} else {
+		agpStatusBarItem.text = `$(rocket) AGP`;
+	}
+}
+
+// ─── Hover Tooltip ────────────────────────────────────────────────────────────
+
+function renderTooltip(snapshot: QuotaSnapshot) {
+	const md = new vscode.MarkdownString();
+	md.isTrusted = true;
+	md.supportThemeIcons = true;
+
+	md.appendMarkdown(`👤 **${snapshot.email}**\n\n`);
+	md.appendMarkdown(`### Model Quota Overview\n\n`);
+	md.appendMarkdown(`| Model | Remaining | Resets In |\n| :--- | :---: | :--- |\n`);
+
+	for (const m of snapshot.models) {
+		const pct = formatPct(m.remainingFraction);
+		const reset = formatTimeRemaining(m.resetTime);
+		md.appendMarkdown(`| **${m.label}** | ${pct} | ${reset} |\n`);
+	}
+
+	md.appendMarkdown(`\n_Click to open dashboard · Refreshes every 2 min_`);
+	agpStatusBarItem.tooltip = md;
+}
+
+// ─── Dashboard (QuickPick) ────────────────────────────────────────────────────
+
 async function openDashboard() {
-  let items: vscode.QuickPickItem[] = [];
+	// Use stale snapshot immediately so the picker opens instantly,
+	// then trigger a background refresh for next open
+	if (!currentSnapshot) {
+		try {
+			// Show a loading indicator while we fetch for the first time
+			agpStatusBarItem.text = `$(sync~spin) AGP`;
+			currentSnapshot = await api.fetchQuota();
+			renderStatusBar(currentSnapshot);
+		} catch (err: any) {
+			vscode.window.showErrorMessage(
+				`Antigravity Pulse: Cannot open dashboard — ${err.message ?? 'Language server is offline.'}`
+			);
+			agpStatusBarItem.text = `$(error) AGP Offline`;
+			return;
+		}
+	}
 
-  try {
-    const response = await fetch("http://127.0.0.1:31415/metrics/quota/detailed");
-    if (response.ok) {
-        const detailedData = await response.json() as any[];
-        // Map the payload to QuickPickItems
-        // Assuming the endpoint returns an array of [{ label, description, detail }, ...]
-        items = detailedData.map((item: any) => ({
-            label: item.label || 'Unknown Model',
-            description: String(item.description || item.pct || 'N/A%'),
-            detail: String(item.detail || `Resets in: ${item.reset || 'N/A'}`)
-        }));
-    } else {
-        throw new Error("Failed to fetch detailed quotas");
-    }
-  } catch(e) {
-      // If fetching detailed data fails, fallback to rendering the simple data we already have
-      const d = currentQuotas;
-      if (d) {
-          items = [
-            { label: "Gemini 3.1 Pro (High)", description: `${d.gemini_pro_high_pct ?? 'N/A'}%`, detail: `Resets in: ${d.gemini_pro_high_reset ?? 'N/A'}` },
-            { label: "Gemini 3.1 Pro (Low)", description: `${d.gemini_pro_low_pct ?? 'N/A'}%`, detail: `Resets in: ${d.gemini_pro_low_reset ?? 'N/A'}` },
-            { label: "Gemini 3 Flash", description: `${d.gemini_flash_pct ?? 'N/A'}%`, detail: `Resets in: ${d.gemini_flash_reset ?? 'N/A'}` },
-            { label: "Claude Sonnet 4.6 (Thinking)", description: `${d.claude_sonnet_pct ?? 'N/A'}%`, detail: `Resets in: ${d.claude_sonnet_reset ?? 'N/A'}` },
-            { label: "Claude Opus 4.6 (Thinking)", description: `${d.claude_opus_pct ?? 'N/A'}%`, detail: `Resets in: ${d.claude_opus_reset ?? 'N/A'}` },
-            { label: "GPT-OSS 120B (Medium)", description: `${d.gpt_oss_pct ?? 'N/A'}%`, detail: `Resets in: ${d.gpt_oss_reset ?? 'N/A'}` },
-          ];
-      } else {
-          vscode.window.showErrorMessage("Antigravity server is offline. Could not fetch models.");
-          return; // Stop if there's no data at all
-      }
-  }
+	const snapshot = currentSnapshot;
 
-  const quickPick = vscode.window.createQuickPick();
-  quickPick.title = "Model Quotas (Click to Pin to Status Bar)";
-  quickPick.placeholder = "Search or select a model to pin to your status bar";
-  quickPick.items = items;
-  
-  // Highlight the currently pinned model with an icon
-  if (pinnedModelLabel) {
-      quickPick.activeItems = quickPick.items.filter(i => i.label === pinnedModelLabel);
-      quickPick.items = quickPick.items.map(i => {
-          if (i.label === pinnedModelLabel) {
-              return { ...i, label: `$(check) ${i.label}` };
-          }
-          return i;
-      });
-  }
+	const items: vscode.QuickPickItem[] = snapshot.models.map((m: ModelQuota) => {
+		const pct = formatPct(m.remainingFraction);
+		const remaining = formatTimeRemaining(m.resetTime);
+		const resetDate = formatResetDate(m.resetTime);
+		const isPinned = pinnedModelLabel === m.label;
+		return {
+			label: isPinned ? `$(check) ${m.label}` : m.label,
+			description: pct,
+			detail: remaining !== 'N/A'
+				? `Resets in: ${remaining}  (${resetDate})`
+				: 'Reset time unavailable'
+		};
+	});
 
-  quickPick.onDidChangeSelection(selection => {
-    if (selection[0]) {
-      // Remove visual checkmark if it exists
-      const cleanLabel = selection[0].label.replace('$(check) ', '');
-      
-      // Toggle logic: If clicking the one already pinned, unpin it. Otherwise pin it.
-      if (pinnedModelLabel === cleanLabel) {
-          pinnedModelLabel = null; 
-      } else {
-          pinnedModelLabel = cleanLabel;
-      }
-      
-      // Immediately refresh UI and close pick
-      updatePulse();
-      quickPick.hide();
-    }
-  });
+	const quickPick = vscode.window.createQuickPick();
+	quickPick.title = `Antigravity Pulse — 👤 ${snapshot.email}`;
+	quickPick.placeholder = 'Click a model to pin it to the status bar (click again to unpin)';
+	quickPick.items = items;
+	quickPick.matchOnDescription = true;
+	quickPick.matchOnDetail = false;
 
-  quickPick.show();
+	// Pre-select the currently pinned model
+	if (pinnedModelLabel) {
+		quickPick.activeItems = quickPick.items.filter(i =>
+			i.label.replace('$(check) ', '') === pinnedModelLabel
+		);
+	}
+
+	quickPick.onDidChangeSelection(selection => {
+		if (selection[0]) {
+			const cleanLabel = selection[0].label.replace('$(check) ', '');
+			// Toggle: clicking the pinned model unpins it
+			pinnedModelLabel = (pinnedModelLabel === cleanLabel) ? null : cleanLabel;
+			renderStatusBar(snapshot);
+			renderTooltip(snapshot);
+			quickPick.hide();
+		}
+	});
+
+	quickPick.show();
+
+	// Silently refresh in background after showing stale data
+	api.fetchQuota().then(fresh => {
+		currentSnapshot = fresh;
+	}).catch(() => { /* ignore background refresh errors */ });
 }

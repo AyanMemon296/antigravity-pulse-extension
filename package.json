@@ -13,6 +13,14 @@
     "vscode": "^1.85.0"
   },
   "categories": ["Other"],
+  "keywords": [
+    "Antigravity",
+    "AI Quota",
+    "Gemini",
+    "Claude",
+    "LLM Monitor",
+    "Developer Tools"
+  ],
   "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
   "contributes": {
@@ -21,7 +29,22 @@
         "command": "antigravity-pulse.openDashboard",
         "title": "Open Quota Dashboard"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Antigravity Pulse",
+      "properties": {
+        "antigravity-pulse.refreshInterval": {
+          "type": "integer",
+          "default": 120000,
+          "description": "Set the quota polling interval in milliseconds (default is 120000 or 2 minutes)."
+        },
+        "antigravity-pulse.showNotifications": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable or disable error notifications when the language server is unreachable."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
