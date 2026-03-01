@@ -7,7 +7,7 @@
   "publisher": "ayan-memon",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ayan-memon/antigravity-pulse"
+    "url": "https://github.com/AyanMemon296/antigravity-pulse-extension"
   },
   "engines": {
     "vscode": "^1.85.0"
