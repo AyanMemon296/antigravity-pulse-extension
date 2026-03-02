@@ -193,10 +193,12 @@ export class AntigravityApi {
 				path: '/exa.language_server_pb.LanguageServerService/GetUserStatus',
 				method: 'POST',
 				headers: {
+					/* eslint-disable @typescript-eslint/naming-convention */
 					'Content-Type': 'application/json',
 					'Content-Length': Buffer.byteLength(body),
 					'X-Codeium-Csrf-Token': csrfToken,
 					'Connect-Protocol-Version': '1'
+					/* eslint-enable @typescript-eslint/naming-convention */
 				},
 				rejectUnauthorized: false, // MUST be false — self-signed local TLS cert
 				timeout: 5000

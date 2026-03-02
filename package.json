@@ -3,7 +3,7 @@
   "displayName": "Antigravity Pulse Monitor",
   "icon": "assets/icon.png",
   "description": "A lightweight, real-time quota monitor for Antigravity AI models.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "ayan-memon",
   "repository": {
     "type": "git",
