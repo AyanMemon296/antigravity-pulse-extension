@@ -292,13 +292,19 @@ export class AntigravityApi {
 		const models: ModelQuota[] = rawModels
 			.filter((m: any) => m?.quotaInfo !== undefined)
 			.map((m: any) => {
-				const fraction = m.quotaInfo?.remainingFraction;
-				const remainingFraction = (typeof fraction === 'number' && isFinite(fraction))
-					? fraction
-					: 1; // Default to full if unknown
-
 				const resetTimeStr: string | undefined = m.quotaInfo?.resetTime;
 				const resetTime = resetTimeStr ? new Date(resetTimeStr).getTime() : 0;
+
+				const fraction = m.quotaInfo?.remainingFraction;
+				let remainingFraction = 1; // Default to full if unknown
+
+				if (typeof fraction === 'number' && isFinite(fraction)) {
+					remainingFraction = fraction;
+				} else if (fraction === undefined && resetTime > Date.now()) {
+					// Protobuf v3 quirk: exact 0.0 floats get omitted from JSON payloads.
+					// If the fraction is missing but there is an active reset throttle in the future, it is 0%.
+					remainingFraction = 0;
+				}
 
 				return {
 					label: m.label ?? 'Unknown Model',
