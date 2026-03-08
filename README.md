@@ -156,7 +156,8 @@ This extension contributes the following settings:
 ## Security Notes
 
 - **No outbound network requests.** Every HTTP call targets `127.0.0.1` only.
-- **No token storage.** The CSRF token is read fresh from the process on every discovery cycle and is never written to disk.
+- **Secure OS Keychain Isolation.** Credentials and session tokens are stored defensively using the VS Code `SecretStorage` API (bound to your OS Keychain).
+- **Strict Rate Limiting.** To prevent potential API abuse flags, the extension enforces a hard limit of no more than one background check every 10 seconds.
 - **No telemetry.** The extension collects and sends zero data.
 - The `rejectUnauthorized: false` flag is required to connect to the IDE's dynamically-generated self-signed certificate. It does not weaken any real security because the connection is strictly loopback-only.
 

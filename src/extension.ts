@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { AntigravityApi, ModelQuota, QuotaSnapshot } from './api';
+import { AuthManager } from './auth';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -8,10 +9,15 @@ let pinnedModelLabel: string | null = null;
 let currentSnapshot: QuotaSnapshot | null = null;
 let refreshIntervalId: NodeJS.Timeout | undefined;
 const api = new AntigravityApi();
+export let authManager: AuthManager;
+export let extensionGlobalStorageUri: vscode.Uri;
 
 // ─── Activation ───────────────────────────────────────────────────────────────
 
 export function activate(context: vscode.ExtensionContext) {
+	// Initialize Security and Isolation requirements
+	authManager = new AuthManager(context.secrets);
+	extensionGlobalStorageUri = context.globalStorageUri;
 	agpStatusBarItem = vscode.window.createStatusBarItem(
 		vscode.StatusBarAlignment.Right,
 		10000
@@ -98,8 +104,13 @@ async function updatePulse() {
 		// If user enabled noisy notifications in settings, show an error popup
 		const showNotifs = vscode.workspace.getConfiguration('antigravity-pulse-monitor').get<boolean>('showNotifications', false);
 		if (showNotifs && currentSnapshot !== null) { 
-			// Check currentSnapshot !== null to prevent spamming notifications on every 2 min tick if already offline
-			vscode.window.showErrorMessage(`Antigravity Pulse Offline: Could not reach the language server.`);
+			// Handle potential 401 Unauthorized equivalent by verifying whether it's an auth error vs network error
+			if (err.message?.includes('401')) {
+				vscode.window.showErrorMessage(`Antigravity Pulse: Session expired. Please log in again.`);
+				if (authManager) await authManager.clearSecrets();
+			} else {
+				vscode.window.showErrorMessage(`Antigravity Pulse Offline: Could not reach the language server.`);
+			}
 		}
 
 		currentSnapshot = null;

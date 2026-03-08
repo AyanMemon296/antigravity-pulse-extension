@@ -30,6 +30,10 @@ export class AntigravityApi {
 	private cachedPid: number | null = null;
 	private cachedCsrfToken: string | null = null;
 	private cachedPort: number | null = null;
+	
+	// Rate Limiting (Throttle) State
+	private lastRequestTime = 0;
+	private cachedSnapshot: QuotaSnapshot | null = null;
 
 	// ─── Step 1: Shell Execution ───────────────────────────────────────────────
 
@@ -197,7 +201,8 @@ export class AntigravityApi {
 					'Content-Type': 'application/json',
 					'Content-Length': Buffer.byteLength(body),
 					'X-Codeium-Csrf-Token': csrfToken,
-					'Connect-Protocol-Version': '1'
+					'Connect-Protocol-Version': '1',
+					'User-Agent': 'antigravity-pulse-monitor/0.1.2'
 					/* eslint-enable @typescript-eslint/naming-convention */
 				},
 				rejectUnauthorized: false, // MUST be false — self-signed local TLS cert
@@ -325,7 +330,15 @@ export class AntigravityApi {
 	 * Fetches and returns the latest quota snapshot from the local Antigravity server.
 	 */
 	public async fetchQuota(): Promise<QuotaSnapshot> {
+		const now = Date.now();
+		// Hardcoded throttle: minimum 10 seconds between requests
+		if (this.cachedSnapshot && (now - this.lastRequestTime < 10000)) {
+			return this.cachedSnapshot;
+		}
+
 		const raw = await this.fetchRawPayload();
-		return this.parsePayload(raw);
+		this.cachedSnapshot = this.parsePayload(raw);
+		this.lastRequestTime = Date.now();
+		return this.cachedSnapshot;
 	}
 }
