@@ -8,6 +8,10 @@
   See your remaining Gemini & Claude limits — directly in your status bar, without leaving your code.
 </p>
 
+Extension Links:  
+Visual Studio Marketplace: https://marketplace.visualstudio.com/items?itemName=ayan-memon.antigravity-pulse-monitor  
+Open VSX Registry: https://open-vsx.org/extension/ayan-memon/antigravity-pulse-monitor  
+
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Antigravity%20IDE-blueviolet?style=flat-square"/>
   <img src="https://img.shields.io/badge/language-TypeScript-blue?style=flat-square&logo=typescript"/>
