@@ -328,17 +328,13 @@ export class AntigravityApi {
 
 	/**
 	 * Fetches and returns the latest quota snapshot from the local Antigravity server.
+	 * NOTE: Deprecated in v0.1.3 as Antigravity IDE natively includes quota monitoring.
+	 * Polling is disabled to prevent unnecessary socket/process lookups.
 	 */
 	public async fetchQuota(): Promise<QuotaSnapshot> {
-		const now = Date.now();
-		// Hardcoded throttle: minimum 10 seconds between requests
-		if (this.cachedSnapshot && (now - this.lastRequestTime < 10000)) {
-			return this.cachedSnapshot;
-		}
-
-		const raw = await this.fetchRawPayload();
-		this.cachedSnapshot = this.parsePayload(raw);
-		this.lastRequestTime = Date.now();
-		return this.cachedSnapshot;
+		return {
+			email: 'Sunset Notice',
+			models: []
+		};
 	}
 }

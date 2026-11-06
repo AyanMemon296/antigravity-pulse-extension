@@ -1,3 +1,7 @@
+# Antigravity Pulse Monitor
+
+> **Notice:** As of November 2026, Google Antigravity IDE natively includes real-time quota tracking inside the model selector menu. Antigravity Pulse Monitor is now officially deprecated. Thank you to the 5,100+ developers who installed and supported this tool.
+
 <h1 align="center">
   <img src="assets/icon.png" width="80" alt="Antigravity Pulse icon"/><br/>
   Antigravity Pulse
@@ -35,7 +39,7 @@ Open VSX Registry: https://open-vsx.org/extension/ayan-memon/antigravity-pulse-m
 
 ## Why I Built This
 
-I was frustrated. In 2026, the VS Code / Antigravity marketplace is full of extensions that promise to show you your AI quota — but many of them are:
+I was frustrated. In March 2026, the VS Code / Antigravity marketplace is full of extensions that promise to show you your AI quota — but many of them are:
 
 - **Scrapers** quietly stealing your CSRF tokens to use your Claude 4 / Gemini 3 Pro credits on someone else's server.
 - **Bloated** extensions that open OAuth popups, store tokens, and make external API calls just to display a number.
