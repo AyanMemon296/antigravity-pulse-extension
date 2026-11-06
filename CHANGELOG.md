@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.3] - 2026-11-07
+
+- DEPRECATED: Antigravity IDE now natively provides quota tracking in the model picker menu.
+- CHANGED: Disabled background process lookups, port probing, and polling intervals.
+- CHANGED: Replaced status bar item with an informative sunset badge (`$(info) AGP Sunset`).
+
 ## [0.1.2] - 2026-03-09
 
 - SECURITY: Migrated to `vscode.SecretStorage` for OS keychain-backed token isolation.
